@@ -139,38 +139,41 @@ class ChatUI {
     }
 
     static handleCodeInsert(code) {
-        // Get the current selection or full document range
-        const selection = sourceEditor.getSelection();
         const model = sourceEditor.getModel();
-        
         let range;
         
         // If there's a stored selection from the original query, use that
         if (currentSelection) {
             range = currentSelection;
+            model.pushEditOperations([], [{
+                range: range,
+                text: code
+            }]);
             currentSelection = null; // Clear the stored selection after use
         }
-        // Else if there's a current selection, use that
-        else if (!selection.isEmpty()) {
-            range = selection;
-        }
-        // Otherwise use the full document
+        // Otherwise use current selection or insert at cursor
         else {
-            range = {
-                startLineNumber: 1,
-                startColumn: 1,
-                endLineNumber: model.getLineCount(),
-                endColumn: model.getLineMaxColumn(model.getLineCount())
-            };
+            const selection = sourceEditor.getSelection();
+            if (!selection.isEmpty()) {
+                model.pushEditOperations([], [{
+                    range: selection,
+                    text: code
+                }]);
+            } else {
+                // If no selection, insert at cursor
+                const position = sourceEditor.getPosition();
+                model.pushEditOperations([], [{
+                    range: {
+                        startLineNumber: position.lineNumber,
+                        startColumn: position.column,
+                        endLineNumber: position.lineNumber,
+                        endColumn: position.column
+                    },
+                    text: code
+                }]);
+            }
         }
-
-        // Replace the code in the determined range
-        sourceEditor.executeEdits('insert-code', [{
-            range: range,
-            text: code,
-            forceMoveMarkers: true
-        }]);
-
+    
         // Format the document if possible
         sourceEditor.getAction('editor.action.formatDocument')?.run();
         
@@ -607,14 +610,26 @@ sourceEditor.onDidChangeCursorSelection(e => {
                 
                 container.appendChild(input);
                 container.appendChild(askButton);
-                
-                askButton.onclick = () => {
+
+                // Function to send the question
+                const sendQuestion = () => {
                     if (!input.value.trim()) return;
                     const userInput = document.getElementById("judge0-chat-user-input");
                     userInput.value = input.value;
                     input.value = '';
-                    userInput.focus();
+                    document.getElementById("judge0-chat-form").dispatchEvent(new Event('submit'));
                 };
+                
+                // Handle Enter key
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        sendQuestion();
+                    }
+                });
+                
+                // Handle button click
+                askButton.onclick = sendQuestion;
                 
                 return container;
             },
@@ -631,4 +646,5 @@ sourceEditor.onDidChangeCursorSelection(e => {
         sourceEditor.addContentWidget(currentWidget);
     }
 });
+
 });
