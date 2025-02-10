@@ -179,6 +179,8 @@ class ChatUI {
     }
 }
 
+
+
 // Add styles to document
 const styles = `
     .chat-container {
@@ -454,15 +456,38 @@ document.addEventListener("DOMContentLoaded", function () {
         messages.scrollTop = messages.scrollHeight;
         
         try {
+            // Get selected code or full document
+            let selection = sourceEditor.getSelection();
+            let contextMessage = "";
+            
+            if (!selection.isEmpty()) {
+                const selectedCode = sourceEditor.getModel().getValueInRange(selection);
+                contextMessage = `
+        Selected code (lines ${selection.startLineNumber}-${selection.endLineNumber}):
+        \`\`\`
+        ${selectedCode}
+        \`\`\`
+        
+        Full code context:
+        \`\`\`
+        ${sourceEditor.getValue()}
+        \`\`\`
+        `;
+            } else {
+                contextMessage = `
+        Current code:
+        \`\`\`
+        ${sourceEditor.getValue()}
+        \`\`\`
+        `;
+            }
+        
             THREAD.push({
                 role: "user",
-                content: `
-User's code:
-${sourceEditor.getValue()}
-
-User's message:
-${userInputValue}
-`.trim()
+                content: `${contextMessage}
+        
+        User's message:
+        ${userInputValue}`.trim()
             });
 
             const aiResponse = await puter.ai.chat(THREAD, {
@@ -550,4 +575,60 @@ document.addEventListener("keydown", function (e) {
                 break;
         }
     }
+    // Add selection monitoring for inline questions
+let currentWidget = null;
+let currentLineNumber = 0;
+
+sourceEditor.onDidChangeCursorSelection(e => {
+    const selection = sourceEditor.getSelection();
+    
+    // Remove existing widget if any
+    if (currentWidget) {
+        sourceEditor.removeContentWidget(currentWidget);
+        currentWidget = null;
+    }
+    
+    if (!selection.isEmpty()) {
+        // Create and add widget
+        currentWidget = {
+            getDomNode: function() {
+                const container = document.createElement('div');
+                container.className = 'inline-chat-widget';
+                container.style.cssText = 'display: flex; gap: 8px; padding: 4px;';
+                
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.placeholder = 'Ask about this code...';
+                input.style.cssText = 'padding: 4px 8px; border-radius: 4px; border: 1px solid #ccc;';
+                
+                const askButton = document.createElement('button');
+                askButton.innerHTML = '<i class="comment icon"></i>';
+                askButton.style.cssText = 'padding: 4px 8px; border-radius: 4px; border: none; background: #0066cc; color: white; cursor: pointer;';
+                
+                container.appendChild(input);
+                container.appendChild(askButton);
+                
+                askButton.onclick = () => {
+                    if (!input.value.trim()) return;
+                    const userInput = document.getElementById("judge0-chat-user-input");
+                    userInput.value = input.value;
+                    input.value = '';
+                    userInput.focus();
+                };
+                
+                return container;
+            },
+            getId: function() {
+                return 'inline-chat-widget';
+            },
+            getPosition: function() {
+                return {
+                    position: { lineNumber: selection.startLineNumber },
+                    preference: [monaco.editor.ContentWidgetPositionPreference.ABOVE]
+                };
+            }
+        };
+        sourceEditor.addContentWidget(currentWidget);
+    }
+});
 });
